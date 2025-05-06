@@ -1,0 +1,148 @@
+import { useState, useEffect } from "react";
+
+export default function SQLInjectionDetector() {
+  const [query, setQuery] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [prediction, setPrediction] = useState(null);
+
+  // Load saved query and model selection from session storage
+  useEffect(() => {
+    const savedQuery = sessionStorage.getItem("savedQuery");
+    const savedModel = sessionStorage.getItem("savedModel");
+    if (savedQuery) setQuery(savedQuery);
+    if (savedModel) setSelectedModel(savedModel);
+  }, []);
+
+  // Save query and model selection to session storage on change
+  useEffect(() => {
+    sessionStorage.setItem("savedQuery", query);
+    sessionStorage.setItem("savedModel", selectedModel);
+  }, [query, selectedModel]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!query.trim() || !selectedModel) {
+      alert("Please enter a query and select a model.");
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:5000/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, model: selectedModel }),
+      });
+
+      const data = await response.json();
+      setPrediction(data.prediction);
+    } catch (error) {
+      console.error("Error detecting SQL Injection:", error);
+    }
+  };
+
+  const handleClear = () => {
+    setQuery("");
+    setSelectedModel("");
+    setPrediction(null);
+    sessionStorage.removeItem("savedQuery");
+    sessionStorage.removeItem("savedModel");
+  };
+
+  const handleDownload = async (e) => {
+    e.preventDefault();
+    console.log('Download URL:', 
+    `http://localhost:5000/generate_pdf?result=${encodeURIComponent(prediction)}&query=${encodeURIComponent(query)}&model=${encodeURIComponent(selectedModel)}`
+  );
+    try {
+      const fullUrl = `http://localhost:5000/generate_pdf?result=${encodeURIComponent(prediction)}&query=${encodeURIComponent(query)}&model=${encodeURIComponent(selectedModel)}`;
+      console.log('Full URL:', fullUrl);
+      
+      const response = await fetch(fullUrl, { 
+        method: "GET",
+        headers: {
+          'Origin': 'http://localhost:5173' // Explicitly set origin
+        }
+      });
+  
+      if (!response.ok) {
+        throw new Error("Failed to download PDF");
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "SQL_Injection_Report.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error downloading the PDF:", error);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
+      <div className="bg-white shadow-lg rounded-2xl p-8 max-w-md w-full text-center">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">SQL Injection Detector</h1>
+
+        {/* Query Input */}
+        <textarea 
+          rows="4" 
+          placeholder="Enter SQL Query..." 
+          value={query} 
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          required
+        ></textarea>
+
+        {/* Model Selection */}
+        <select 
+          value={selectedModel} 
+          onChange={(e) => setSelectedModel(e.target.value)}
+          className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        >
+          <option value="">Select a Model</option>
+          <option value="Model 1 Dataset 1">Model 1 (Dataset 1)</option>
+          <option value="Model 1 Dataset 2">Model 1 (Dataset 2)</option>
+          <option value="Model 2 Dataset 1">Model 2 (Dataset 1)</option>
+          <option value="Model 2 Dataset 2">Model 2 (Dataset 2)</option>
+        </select>
+
+        {/* Detect & Clear Buttons */}
+        <div className="flex gap-4">
+          <button 
+            onClick={handleSubmit}
+            className="flex-1 bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Detect SQL Injection
+          </button>
+          <button 
+            onClick={handleClear}
+            className="flex-1 bg-gray-500 text-white font-semibold py-2 rounded-lg hover:bg-gray-600 transition"
+          >
+            Clear
+          </button>
+        </div>
+
+        {/* Prediction Output */}
+        {prediction !== null && (
+          <div className={`mt-4 p-3 rounded-lg ${prediction === "SQL Injection Detected" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+            <strong>Prediction:</strong> {prediction}
+          </div>
+        )}
+
+        {/* Download Report Button */}
+        {prediction && (
+          <button
+            onClick={handleDownload}
+            className="mt-4 bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition"
+            type="button"
+          >
+            Download Detailed Report
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
